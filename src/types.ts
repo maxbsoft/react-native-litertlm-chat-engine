@@ -10,6 +10,7 @@ export interface ChatEngineConfig {
 
 export interface ChatResponse {
   response: string;
+  done?: boolean; // true when streaming is complete
 }
 
 export interface MetricsData {

@@ -1,6 +1,6 @@
 {
   "name": "react-native-rn-litertlm-chat-engine",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "LiteRT-lm Chat Engine",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -154,6 +154,11 @@
     "jsSrcsDir": "src",
     "android": {
       "javaPackageName": "com.rnlitertlmchatengine"
+    },
+    "ios": {
+      "modulesProvider": {
+        "RnLitertlmChatEngine": "RnLitertlmChatEngine"
+      }
     }
   },
   "create-react-native-library": {

@@ -29,5 +29,15 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "codegenConfig": {
+    "name": "RnLitertlmChatEngineExampleSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "ios": {
+      "modulesProvider": {
+        "RnLitertlmChatEngine": "RnLitertlmChatEngine"
+      }
+    }
   }
 }

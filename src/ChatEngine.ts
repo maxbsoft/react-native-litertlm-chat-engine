@@ -1,18 +1,36 @@
-import { EventEmitter } from 'events';
 import RnLitertlmChatEngine from './NativeRnLitertlmChatEngine';
-import type {
-  ChatEngineConfig,
-  ChatEngineError,
-  ChatEngineEvents,
-} from './types';
+import type { ChatEngineConfig, ChatEngineError } from './types';
 import { validateChatEngineConfig, validateInputText } from './validation';
+import { NativeEventEmitter, NativeModules } from 'react-native';
 
-export class ChatEngine extends EventEmitter {
+export class ChatEngine {
   private isInitialized = false;
   private isDestroyed = false;
+  private eventEmitter: NativeEventEmitter;
 
   constructor() {
-    super();
+    console.log(
+      'ChatEngine constructor - Setting up NativeEventEmitter for Turbo Module'
+    );
+
+    // For TurboModules with events, we need to use the module from NativeModules
+    // but first check if it's properly available
+    console.log(
+      'Available modules in NativeModules:',
+      Object.keys(NativeModules)
+    );
+    const nativeModule = NativeModules.RnLitertlmChatEngine;
+    console.log('Native module from NativeModules:', nativeModule);
+
+    if (!nativeModule) {
+      console.error('RnLitertlmChatEngine module not found in NativeModules!');
+      throw new Error(
+        'RnLitertlmChatEngine module not found - ensure it is properly registered'
+      );
+    }
+
+    this.eventEmitter = new NativeEventEmitter(nativeModule);
+    console.log('NativeEventEmitter created successfully');
   }
 
   /**
@@ -41,9 +59,14 @@ export class ChatEngine extends EventEmitter {
     }
 
     try {
-      await RnLitertlmChatEngine.createEngine(config);
+      await RnLitertlmChatEngine.createEngine(
+        config.modelPath,
+        config.backendType,
+        config.maxTokens,
+        config.temperature,
+        config.numThreads
+      );
       this.isInitialized = true;
-      this.emit('ready');
     } catch (error) {
       const chatError: ChatEngineError = {
         code: 'INITIALIZATION_FAILED',
@@ -53,7 +76,6 @@ export class ChatEngine extends EventEmitter {
             : 'Failed to initialize chat engine',
         details: error,
       };
-      this.emit('error', chatError);
       throw new Error(`Failed to initialize chat engine: ${chatError.message}`);
     }
   }
@@ -70,15 +92,6 @@ export class ChatEngine extends EventEmitter {
     try {
       return await RnLitertlmChatEngine.isReady();
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'READY_CHECK_FAILED',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Failed to check engine readiness',
-        details: error,
-      };
-      this.emit('error', chatError);
       return false;
     }
   }
@@ -109,10 +122,8 @@ export class ChatEngine extends EventEmitter {
     }
 
     try {
-      this.emit('generating', true);
       await RnLitertlmChatEngine.generateAsync(inputText);
     } catch (error) {
-      this.emit('generating', false);
       const chatError: ChatEngineError = {
         code: 'GENERATION_FAILED',
         message:
@@ -121,7 +132,6 @@ export class ChatEngine extends EventEmitter {
             : 'Failed to generate response',
         details: error,
       };
-      this.emit('error', chatError);
       throw new Error(`Failed to generate response: ${chatError.message}`);
     }
   }
@@ -136,15 +146,8 @@ export class ChatEngine extends EventEmitter {
 
     try {
       await RnLitertlmChatEngine.stopGeneration();
-      this.emit('generating', false);
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'STOP_GENERATION_FAILED',
-        message:
-          error instanceof Error ? error.message : 'Failed to stop generation',
-        details: error,
-      };
-      this.emit('error', chatError);
+      // Silent fail for stop generation
     }
   }
 
@@ -160,15 +163,6 @@ export class ChatEngine extends EventEmitter {
     try {
       return await RnLitertlmChatEngine.isGenerating();
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'GENERATION_STATUS_CHECK_FAILED',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Failed to check generation status',
-        details: error,
-      };
-      this.emit('error', chatError);
       return false;
     }
   }
@@ -184,13 +178,7 @@ export class ChatEngine extends EventEmitter {
     try {
       await RnLitertlmChatEngine.clearHistory();
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'CLEAR_HISTORY_FAILED',
-        message:
-          error instanceof Error ? error.message : 'Failed to clear history',
-        details: error,
-      };
-      this.emit('error', chatError);
+      // Silent fail for clear history
     }
   }
 
@@ -218,7 +206,6 @@ export class ChatEngine extends EventEmitter {
           error instanceof Error ? error.message : 'Failed to get model info',
         details: error,
       };
-      this.emit('error', chatError);
       throw new Error(`Failed to get model info: ${chatError.message}`);
     }
   }
@@ -235,15 +222,6 @@ export class ChatEngine extends EventEmitter {
     try {
       return await RnLitertlmChatEngine.getDebugMessage();
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'GET_DEBUG_MESSAGE_FAILED',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Failed to get debug message',
-        details: error,
-      };
-      this.emit('error', chatError);
       return '';
     }
   }
@@ -260,15 +238,6 @@ export class ChatEngine extends EventEmitter {
     try {
       return await RnLitertlmChatEngine.getDebugHistory();
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'GET_DEBUG_HISTORY_FAILED',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Failed to get debug history',
-        details: error,
-      };
-      this.emit('error', chatError);
       return '';
     }
   }
@@ -285,13 +254,7 @@ export class ChatEngine extends EventEmitter {
     try {
       await RnLitertlmChatEngine.logFromSwift(message);
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'LOG_FROM_SWIFT_FAILED',
-        message:
-          error instanceof Error ? error.message : 'Failed to log from Swift',
-        details: error,
-      };
-      this.emit('error', chatError);
+      // Silent fail for logging
     }
   }
 
@@ -306,15 +269,7 @@ export class ChatEngine extends EventEmitter {
     try {
       await RnLitertlmChatEngine.clearDebugHistory();
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'CLEAR_DEBUG_HISTORY_FAILED',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Failed to clear debug history',
-        details: error,
-      };
-      this.emit('error', chatError);
+      // Silent fail for clear debug history
     }
   }
 
@@ -332,7 +287,6 @@ export class ChatEngine extends EventEmitter {
           error instanceof Error ? error.message : 'Failed to test C function',
         details: error,
       };
-      this.emit('error', chatError);
       throw new Error(`Failed to test C function: ${chatError.message}`);
     }
   }
@@ -351,35 +305,41 @@ export class ChatEngine extends EventEmitter {
       }
       this.isInitialized = false;
       this.isDestroyed = true;
-      this.removeAllListeners();
     } catch (error) {
-      const chatError: ChatEngineError = {
-        code: 'DESTROY_FAILED',
-        message:
-          error instanceof Error ? error.message : 'Failed to destroy engine',
-        details: error,
-      };
-      this.emit('error', chatError);
+      // Silent fail for destroy
     }
   }
 
   /**
-   * Type-safe event listener registration
+   * Event emitter methods - using NativeEventEmitter properly
    */
-  on<K extends keyof ChatEngineEvents>(
-    event: K,
-    listener: ChatEngineEvents[K]
-  ): this {
-    return super.on(event, listener as any);
+  addListener(eventName: string, listener: (event: any) => void) {
+    console.log(
+      `ChatEngine addListener - Adding listener for event: ${eventName}`
+    );
+    console.log('Event emitter instance:', this.eventEmitter);
+
+    // For TurboModules, we need to call the native addListener method first
+    try {
+      RnLitertlmChatEngine.addListener(eventName);
+      console.log('Native addListener called successfully');
+    } catch (error) {
+      console.log('Native addListener call failed:', error);
+    }
+
+    const subscription = this.eventEmitter.addListener(eventName, listener);
+    console.log('ChatEngine addListener - Subscription created:', subscription);
+
+    return subscription;
   }
 
-  /**
-   * Type-safe event listener removal
-   */
-  off<K extends keyof ChatEngineEvents>(
-    event: K,
-    listener: ChatEngineEvents[K]
-  ): this {
-    return super.off(event, listener as any);
+  removeAllListeners(eventName: string) {
+    return this.eventEmitter.removeAllListeners(eventName);
+  }
+
+  removeSubscription(subscription: any) {
+    if (subscription && subscription.remove) {
+      subscription.remove();
+    }
   }
 }

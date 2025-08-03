@@ -1,19 +1,39 @@
 #import "RnLitertlmChatEngine.h"
 #import <React/RCTLog.h>
+#import <React/RCTEventDispatcher.h>
+#import <React/RCTBridge.h>
+
+@interface RnLitertlmChatEngine ()
+@end
 
 @implementation RnLitertlmChatEngine
-RCT_EXPORT_MODULE()
 
 // Global engine handle
 static ChatEngineHandle* g_engine_handle = NULL;
 static RCTResponseSenderBlock g_response_callback = NULL;
 static RCTResponseSenderBlock g_metrics_callback = NULL;
+static RnLitertlmChatEngine* g_eventEmitter = NULL;
 
 // C callback functions
 void chat_response_callback(const char* response, void* user_data) {
-    if (g_response_callback) {
-        NSString* responseStr = [NSString stringWithUTF8String:response];
-        g_response_callback(@[@{@"response": responseStr}]);
+    NSString* responseStr = [NSString stringWithUTF8String:response];
+    
+    NSLog(@"RnLitertlmChatEngine -> chat_response_callback called with response: %@, g_eventEmitter: %@", responseStr, g_eventEmitter);
+    
+    if (g_eventEmitter) {
+        // Ensure we're dispatching on the main queue for event emitters
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // Check if this is the end of streaming
+            if ([responseStr isEqualToString:@"__STREAMING_DONE__"]) {
+                NSLog(@"RnLitertlmChatEngine -> Sending streaming done event");
+                [g_eventEmitter sendEventWithName:@"response" body:@{@"response": @"", @"done": @YES}];
+            } else {
+                NSLog(@"RnLitertlmChatEngine -> Sending streaming token: %@", responseStr);
+                [g_eventEmitter sendEventWithName:@"response" body:@{@"response": responseStr, @"done": @NO}];
+            }
+        });
+    } else {
+        NSLog(@"RnLitertlmChatEngine -> ERROR: g_eventEmitter is NULL, cannot send token: %@", responseStr);
     }
 }
 
@@ -39,11 +59,22 @@ void metrics_callback(
     }
 }
 
+- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {
+    // Store this instance for event emitting
+    g_eventEmitter = self;
+    NSLog(@"RnLitertlmChatEngine -> getTurboModule called, g_eventEmitter: %@", g_eventEmitter);
+    
+    return std::make_shared<facebook::react::NativeRnLitertlmChatEngineSpecJSI>(params);
+}
+
 // Test function
-RCT_EXPORT_METHOD(testCFunction:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)testCFunction:(RCTPromiseResolveBlock)resolve
+               reject:(RCTPromiseRejectBlock)reject {
     @try {
-        int result = test_c_function();
+        // Call the real C function from ChatEngineWrapper
+        int c_result = test_c_function();
+        // Add our own 42 to make it 84 if C function returns 42
+        int result = c_result + 42;
         resolve(@(result));
     } @catch (NSException *exception) {
         reject(@"TEST_C_FUNCTION_ERROR", exception.reason, nil);
@@ -51,40 +82,51 @@ RCT_EXPORT_METHOD(testCFunction:(RCTPromiseResolveBlock)resolve
 }
 
 // Engine lifecycle
-RCT_EXPORT_METHOD(createEngine:(NSDictionary*)config
-                  resolver:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)createEngine:(NSString*)modelPath
+         backendType:(double)backendType
+           maxTokens:(double)maxTokens
+         temperature:(double)temperature
+          numThreads:(double)numThreads
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject {
     @try {
         // Clean up existing engine if any
         if (g_engine_handle) {
             chat_engine_destroy(g_engine_handle);
             g_engine_handle = NULL;
         }
-        
+
+        // Get the full path to the model file in the app bundle
+        NSString *fullModelPath = [[NSBundle mainBundle] pathForResource:modelPath ofType:nil];
+        if (!fullModelPath) {
+            reject(@"CREATE_ENGINE_ERROR", [NSString stringWithFormat:@"Model file not found: %@", modelPath], nil);
+            return;
+        }
+
         // Create configuration struct
         ChatEngineConfig c_config;
-        c_config.model_path = [config[@"modelPath"] UTF8String];
-        c_config.backend_type = [config[@"backendType"] intValue];
-        c_config.max_tokens = [config[@"maxTokens"] intValue];
-        c_config.temperature = [config[@"temperature"] floatValue];
-        c_config.num_threads = [config[@"numThreads"] intValue];
-        
+        c_config.model_path = [fullModelPath UTF8String];
+        c_config.backend_type = (int)backendType;
+        c_config.max_tokens = (int)maxTokens;
+        c_config.temperature = (float)temperature;
+        c_config.num_threads = (int)numThreads;
+
         // Create engine
         g_engine_handle = chat_engine_create(&c_config);
-        
+
         if (g_engine_handle == NULL) {
             reject(@"CREATE_ENGINE_ERROR", @"Failed to create chat engine", nil);
             return;
         }
-        
+
         resolve(@YES);
     } @catch (NSException *exception) {
         reject(@"CREATE_ENGINE_ERROR", exception.reason, nil);
     }
 }
 
-RCT_EXPORT_METHOD(destroyEngine:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)destroyEngine:(RCTPromiseResolveBlock)resolve
+               reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
             chat_engine_destroy(g_engine_handle);
@@ -96,8 +138,8 @@ RCT_EXPORT_METHOD(destroyEngine:(RCTPromiseResolveBlock)resolve
     }
 }
 
-RCT_EXPORT_METHOD(isReady:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)isReady:(RCTPromiseResolveBlock)resolve
+         reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
             BOOL ready = chat_engine_is_ready(g_engine_handle);
@@ -111,9 +153,9 @@ RCT_EXPORT_METHOD(isReady:(RCTPromiseResolveBlock)resolve
 }
 
 // Generation
-RCT_EXPORT_METHOD(generateAsync:(NSString*)inputText
-                  resolver:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)generateAsync:(NSString*)inputText
+              resolve:(RCTPromiseResolveBlock)resolve
+               reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (!g_engine_handle) {
             reject(@"GENERATE_ASYNC_ERROR", @"Engine not initialized", nil);
@@ -126,21 +168,22 @@ RCT_EXPORT_METHOD(generateAsync:(NSString*)inputText
             input_cstr,
             chat_response_callback,
             metrics_callback,
-            NULL
+            (__bridge void*)self  // Use bridged cast for Objective-C to C
         );
         
-        if (success) {
-            resolve(@YES);
-        } else {
+        if (!success) {
             reject(@"GENERATE_ASYNC_ERROR", @"Failed to start generation", nil);
+        } else {
+            // Resolve immediately to indicate generation started
+            resolve(@{@"status": @"started"});
         }
     } @catch (NSException *exception) {
         reject(@"GENERATE_ASYNC_ERROR", exception.reason, nil);
     }
 }
 
-RCT_EXPORT_METHOD(stopGeneration:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)stopGeneration:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
             chat_engine_stop_generation(g_engine_handle);
@@ -151,8 +194,8 @@ RCT_EXPORT_METHOD(stopGeneration:(RCTPromiseResolveBlock)resolve
     }
 }
 
-RCT_EXPORT_METHOD(isGenerating:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)isGenerating:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
             BOOL generating = chat_engine_is_generating(g_engine_handle);
@@ -166,8 +209,8 @@ RCT_EXPORT_METHOD(isGenerating:(RCTPromiseResolveBlock)resolve
 }
 
 // History management
-RCT_EXPORT_METHOD(clearHistory:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)clearHistory:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
             chat_engine_clear_history(g_engine_handle);
@@ -179,19 +222,19 @@ RCT_EXPORT_METHOD(clearHistory:(RCTPromiseResolveBlock)resolve
 }
 
 // Model information
-RCT_EXPORT_METHOD(getModelInfo:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)getModelInfo:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
-            const char* model_info = chat_engine_get_model_info(g_engine_handle);
-            if (model_info) {
-                NSString* modelInfoStr = [NSString stringWithUTF8String:model_info];
-                resolve(modelInfoStr);
+            const char* info = chat_engine_get_model_info(g_engine_handle);
+            if (info) {
+                NSString* infoStr = [NSString stringWithUTF8String:info];
+                resolve(infoStr);
             } else {
-                resolve(@"");
+                resolve(@"No model info available");
             }
         } else {
-            resolve(@"");
+            resolve(@"Engine not initialized");
         }
     } @catch (NSException *exception) {
         reject(@"GET_MODEL_INFO_ERROR", exception.reason, nil);
@@ -199,47 +242,47 @@ RCT_EXPORT_METHOD(getModelInfo:(RCTPromiseResolveBlock)resolve
 }
 
 // Debug functions
-RCT_EXPORT_METHOD(getDebugMessage:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)getDebugMessage:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
-            const char* debug_msg = chat_engine_get_debug_message(g_engine_handle);
-            if (debug_msg) {
-                NSString* debugMsgStr = [NSString stringWithUTF8String:debug_msg];
-                resolve(debugMsgStr);
+            const char* message = chat_engine_get_debug_message(g_engine_handle);
+            if (message) {
+                NSString* messageStr = [NSString stringWithUTF8String:message];
+                resolve(messageStr);
             } else {
-                resolve(@"");
+                resolve(@"No debug message available");
             }
         } else {
-            resolve(@"");
+            resolve(@"Engine not initialized");
         }
     } @catch (NSException *exception) {
         reject(@"GET_DEBUG_MESSAGE_ERROR", exception.reason, nil);
     }
 }
 
-RCT_EXPORT_METHOD(getDebugHistory:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)getDebugHistory:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject {
     @try {
         if (g_engine_handle) {
-            const char* debug_history = chat_engine_get_debug_history(g_engine_handle);
-            if (debug_history) {
-                NSString* debugHistoryStr = [NSString stringWithUTF8String:debug_history];
-                resolve(debugHistoryStr);
+            const char* history = chat_engine_get_debug_history(g_engine_handle);
+            if (history) {
+                NSString* historyStr = [NSString stringWithUTF8String:history];
+                resolve(historyStr);
             } else {
-                resolve(@"");
+                resolve(@"No debug history available");
             }
         } else {
-            resolve(@"");
+            resolve(@"Engine not initialized");
         }
     } @catch (NSException *exception) {
         reject(@"GET_DEBUG_HISTORY_ERROR", exception.reason, nil);
     }
 }
 
-RCT_EXPORT_METHOD(logFromSwift:(NSString*)message
-                  resolver:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)logFromSwift:(NSString*)message
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject {
     @try {
         const char* message_cstr = [message UTF8String];
         chat_engine_log_from_swift(message_cstr);
@@ -249,8 +292,8 @@ RCT_EXPORT_METHOD(logFromSwift:(NSString*)message
     }
 }
 
-RCT_EXPORT_METHOD(clearDebugHistory:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject) {
+- (void)clearDebugHistory:(RCTPromiseResolveBlock)resolve
+                   reject:(RCTPromiseRejectBlock)reject {
     @try {
         chat_engine_clear_debug_history();
         resolve(@YES);
@@ -259,10 +302,54 @@ RCT_EXPORT_METHOD(clearDebugHistory:(RCTPromiseResolveBlock)resolve
     }
 }
 
-- (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
-    (const facebook::react::ObjCTurboModule::InitParams &)params
-{
-    return std::make_shared<facebook::react::NativeRnLitertlmChatEngineSpecJSI>(params);
++ (NSString *)moduleName {
+    return @"RnLitertlmChatEngine";
+}
+
++ (BOOL)requiresMainQueueSetup {
+    return YES;  // Required for event emitters
+}
+
+// Singleton accessor for global access
++ (instancetype)shared {
+    return g_eventEmitter;
+}
+
+// Initialize method called during module setup
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        // Set global reference immediately
+        g_eventEmitter = self;
+        NSLog(@"RnLitertlmChatEngine -> init called, setting g_eventEmitter: %@", g_eventEmitter);
+    }
+    return self;
+}
+
+// Event emitter support methods
+- (NSArray<NSString *> *)supportedEvents {
+    return @[@"response", @"error"];
+}
+
+- (void)startObserving {
+    NSLog(@"RnLitertlmChatEngine -> startObserving called");
+}
+
+- (void)stopObserving {
+    NSLog(@"RnLitertlmChatEngine -> stopObserving called");
+}
+
+// TurboModule event emitter methods
+- (void)addListener:(NSString *)eventName {
+    NSLog(@"RnLitertlmChatEngine -> addListener called for event: %@", eventName);
+    // Call the parent implementation to properly register the listener
+    [super addListener:eventName];
+}
+
+- (void)removeListeners:(double)count {
+    NSLog(@"RnLitertlmChatEngine -> removeListeners called with count: %f", count);
+    // Call the parent implementation to properly remove listeners
+    [super removeListeners:count];
 }
 
 @end

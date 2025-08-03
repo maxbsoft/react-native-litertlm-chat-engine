@@ -1,6 +1,7 @@
+#import <React/RCTEventEmitter.h>
 #import <RnLitertlmChatEngineSpec/RnLitertlmChatEngineSpec.h>
 #import <ChatEngineWrapper/ChatEngineWrapper.h>
 
-@interface RnLitertlmChatEngine : NSObject <NativeRnLitertlmChatEngineSpec>
+@interface RnLitertlmChatEngine : RCTEventEmitter <NativeRnLitertlmChatEngineSpec>
 
 @end

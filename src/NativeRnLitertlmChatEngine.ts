@@ -1,13 +1,18 @@
 import type { TurboModule } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
-import type { ChatEngineConfig } from './types';
 
 export interface Spec extends TurboModule {
   // Test function
   testCFunction(): Promise<number>;
 
   // Engine lifecycle
-  createEngine(config: ChatEngineConfig): Promise<void>;
+  createEngine(
+    modelPath: string,
+    backendType: number,
+    maxTokens: number,
+    temperature: number,
+    numThreads: number
+  ): Promise<void>;
   destroyEngine(): Promise<void>;
   isReady(): Promise<boolean>;
 
@@ -27,6 +32,10 @@ export interface Spec extends TurboModule {
   getDebugHistory(): Promise<string>;
   logFromSwift(message: string): Promise<void>;
   clearDebugHistory(): Promise<void>;
+
+  // Event emitter methods required for TurboModule events
+  addListener(eventName: string): void;
+  removeListeners(count: number): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('RnLitertlmChatEngine');
