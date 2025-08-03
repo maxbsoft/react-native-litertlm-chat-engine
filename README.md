@@ -11,7 +11,7 @@ A React Native Turbo Module that provides a TypeScript wrapper for the LiteRT-LM
 - **Error Handling**: Comprehensive error handling with detailed error messages
 - **Debug Support**: Built-in logging and debug functionality
 - **Memory Management**: Explicit cleanup methods for proper resource management
-- **React Native 0.80.2+ Support**: Compatible with the new architecture
+- **React Native 0.80.2+ Support**: Compatible with the new architecture (TurboModules)
 
 ## Installation
 
@@ -50,11 +50,21 @@ wget https://huggingface.co/google/gemma-3n-E4B-it-litert-preview/resolve/main/g
 ### Manual Download
 
 1. Visit [Gemma 3n E2B](https://huggingface.co/google/gemma-3n-E2B-it-litert-preview) or [Gemma 3n E4B](https://huggingface.co/google/gemma-3n-E4B-it-litert-preview)
-2. Accept the model terms
+2. **Accept Google's usage license** (required to access model files)
 3. Download the `.litertlm` file
 4. Place it in your app's bundle or documents directory
 
 **Note**: Model files are large (2-4GB) and not included in the repository. You must download them separately.
+
+### License Requirements
+
+The Gemma models require acceptance of Google's usage license. When downloading from Hugging Face, you must:
+
+1. Log in to your Hugging Face account
+2. Review and accept Google's Gemma usage license
+3. Agree to the model terms before downloading
+
+For commercial use, please review Google's [Gemma Prohibited Use Policy](https://ai.google.dev/gemma/docs/prohibited_use) and ensure compliance with the license terms.
 
 ## Usage
 
@@ -347,9 +357,11 @@ The module provides comprehensive error handling with detailed error messages. A
 
 ## Requirements
 
-- React Native 0.80.2+
+- React Native 0.80.2+ with new architecture (TurboModules) enabled
 - iOS 12.0+
 - Xcode 14.0+
+
+**Note**: This module uses TurboModules and requires the new React Native architecture to be enabled in your project.
 
 ## License
 
