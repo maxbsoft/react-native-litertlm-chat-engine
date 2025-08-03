@@ -24,7 +24,16 @@ npm install react-native-rn-litertlm-chat-engine
 yarn add react-native-rn-litertlm-chat-engine
 ```
 
-2. Install iOS dependencies:
+2. If cloning from source, ensure Git LFS is installed:
+```bash
+# Install Git LFS if not already installed
+git lfs install
+
+# Pull LFS files
+git lfs pull
+```
+
+3. Install iOS dependencies:
 ```bash
 cd ios && pod install
 ```
@@ -55,6 +64,8 @@ wget https://huggingface.co/google/gemma-3n-E4B-it-litert-preview/resolve/main/g
 4. Place it in your app's bundle or documents directory
 
 **Note**: Model files are large (2-4GB) and not included in the repository. You must download them separately.
+
+**Important**: The `ChatEngineWrapper.xcframework` is tracked with Git LFS. If you're cloning from source, ensure Git LFS is installed and run `git lfs pull` to download the framework files.
 
 ### License Requirements
 
