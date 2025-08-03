@@ -1,0 +1,14 @@
+framework module ChatEngineWrapper {
+  umbrella header "ChatEngineWrapper.h"
+  export *
+  module * { export * }
+  link "System"
+  link "dl"
+  link "m"
+  link "objc"
+  link "pthread"
+  link "resolv"
+  link framework "CoreFoundation"
+  link framework "Foundation"
+  link framework "Security"
+}
