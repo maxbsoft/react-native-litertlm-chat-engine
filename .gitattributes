@@ -1,3 +1,4 @@
 *.pbxproj -text
 # specific for windows script files
 *.bat text eol=crlf
+ChatEngineWrapper filter=lfs diff=lfs merge=lfs -text
