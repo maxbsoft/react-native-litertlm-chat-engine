@@ -33,6 +33,29 @@ cd ios && pod install
 
 Android support is planned but not yet implemented. The module will throw appropriate errors on Android platforms.
 
+## Model Download
+
+The module requires a LiteRT model file. You can download compatible models from Hugging Face:
+
+### Download via Terminal
+
+```bash
+# Download Gemma 3n E2B model (smaller, faster)
+wget https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/gemma-3n-E2B-it-int4.litertlm
+
+# Or download Gemma 3n E4B model (larger, more capable)
+wget https://huggingface.co/google/gemma-3n-E4B-it-litert-preview/resolve/main/gemma-3n-E4B-it-int4.litertlm
+```
+
+### Manual Download
+
+1. Visit [Gemma 3n E2B](https://huggingface.co/google/gemma-3n-E2B-it-litert-preview) or [Gemma 3n E4B](https://huggingface.co/google/gemma-3n-E4B-it-litert-preview)
+2. Accept the model terms
+3. Download the `.litertlm` file
+4. Place it in your app's bundle or documents directory
+
+**Note**: Model files are large (2-4GB) and not included in the repository. You must download them separately.
+
 ## Usage
 
 ### Basic Setup
@@ -65,12 +88,14 @@ try {
 
 ```typescript
 // Listen for responses
-chatEngine.on('response', (data) => {
+const responseSubscription = chatEngine.addListener('response', (data) => {
   console.log('Received response:', data.response);
+  // data.response contains the full accumulated response (previous tokens + new token)
+  // data.done indicates when streaming is complete
 });
 
 // Listen for metrics
-chatEngine.on('metrics', (metrics) => {
+const metricsSubscription = chatEngine.addListener('metrics', (metrics) => {
   console.log('Generation metrics:', {
     tokensPerSecond: metrics.tokensPerSecond,
     totalTimeMs: metrics.totalTimeMs,
@@ -80,19 +105,26 @@ chatEngine.on('metrics', (metrics) => {
 });
 
 // Listen for errors
-chatEngine.on('error', (error) => {
+const errorSubscription = chatEngine.addListener('error', (error) => {
   console.error('Engine error:', error);
 });
 
 // Listen for ready state
-chatEngine.on('ready', () => {
+const readySubscription = chatEngine.addListener('ready', () => {
   console.log('Engine is ready');
 });
 
 // Listen for generation status
-chatEngine.on('generating', (isGenerating) => {
+const generatingSubscription = chatEngine.addListener('generating', (isGenerating) => {
   console.log('Generation status:', isGenerating);
 });
+
+// Clean up subscriptions
+responseSubscription.remove();
+metricsSubscription.remove();
+errorSubscription.remove();
+readySubscription.remove();
+generatingSubscription.remove();
 ```
 
 ### Text Generation
@@ -143,6 +175,10 @@ await chatEngine.logFromSwift('Debug message from Swift');
 
 // Clear debug history
 await chatEngine.clearDebugHistory();
+
+// Test C function connectivity
+const testResult = await chatEngine.testCFunction();
+console.log('C function test result:', testResult);
 ```
 
 ### Complete Example
@@ -162,15 +198,21 @@ const ChatApp = () => {
     const engine = new ChatEngine();
     
     // Set up event listeners
-    engine.on('response', (data) => {
+    const responseSubscription = engine.addListener('response', (data) => {
+      // data.response contains the full accumulated response
       setResponses(prev => [...prev, data.response]);
+      
+      // Check if streaming is complete
+      if (data.done) {
+        console.log('Streaming completed');
+      }
     });
 
-    engine.on('error', (error) => {
+    const errorSubscription = engine.addListener('error', (error) => {
       console.error('Engine error:', error);
     });
 
-    engine.on('generating', (generating) => {
+    const generatingSubscription = engine.addListener('generating', (generating) => {
       setIsGenerating(generating);
     });
 
@@ -197,6 +239,9 @@ const ChatApp = () => {
 
     // Cleanup on unmount
     return () => {
+      responseSubscription.remove();
+      errorSubscription.remove();
+      generatingSubscription.remove();
       engine.destroy();
     };
   }, []);
@@ -263,7 +308,7 @@ interface ChatEngineConfig {
 
 ### Events
 
-- `response`: Fired when a response is received
+- `response`: Fired when a response is received (contains full accumulated response)
 - `metrics`: Fired with generation metrics
 - `error`: Fired when an error occurs
 - `ready`: Fired when the engine is ready
@@ -278,7 +323,14 @@ interface ChatEngineConfig {
 - `isGenerating()`: Check if currently generating
 - `clearHistory()`: Clear conversation history
 - `getModelInfo()`: Get model information
+- `testCFunction()`: Test C function connectivity
 - `destroy()`: Clean up resources
+
+### Event Handling
+
+- `addListener(eventName, listener)`: Add event listener
+- `removeAllListeners(eventName)`: Remove all listeners for an event
+- `removeSubscription(subscription)`: Remove specific subscription
 
 ## Error Handling
 
