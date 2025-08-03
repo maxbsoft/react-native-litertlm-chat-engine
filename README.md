@@ -376,4 +376,4 @@ The module provides comprehensive error handling with detailed error messages. A
 
 ## License
 
-MIT
+Creative Commons Attribution 4.0 International (CC BY 4.0)
