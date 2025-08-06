@@ -24,18 +24,28 @@ npm install react-native-rn-litertlm-chat-engine
 yarn add react-native-rn-litertlm-chat-engine
 ```
 
-2. If cloning from source, ensure Git LFS is installed:
-```bash
-# Install Git LFS if not already installed
-git lfs install
+> **Note**: The package will automatically download the required `ChatEngineWrapper.xcframework` during installation. If the automatic download fails, manual installation instructions will be provided.
 
-# Pull LFS files
-git lfs pull
-```
-
-3. Install iOS dependencies:
+2. Install iOS dependencies:
 ```bash
 cd ios && pod install
+```
+
+### Manual Framework Installation (if needed)
+
+If the automatic framework download fails during `npm install`, you can manually install it:
+
+```bash
+# Clone the repository with Git LFS
+git clone https://github.com/maxbsoft/react-native-litertlm-chat-engine.git
+cd react-native-litertlm-chat-engine/rn-litertlm-chat-engine
+
+# Install Git LFS and pull files
+git lfs install
+git lfs pull
+
+# Copy framework to your node_modules
+cp -r ChatEngineWrapper.xcframework /path/to/your/project/node_modules/react-native-rn-litertlm-chat-engine/
 ```
 
 ### Android

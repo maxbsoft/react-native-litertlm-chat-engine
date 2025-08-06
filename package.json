@@ -1,6 +1,6 @@
 {
   "name": "react-native-rn-litertlm-chat-engine",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "LiteRT-lm Chat Engine",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -20,6 +20,8 @@
     "cpp",
     "*.podspec",
     "react-native.config.js",
+    "scripts",
+    "!ChatEngineWrapper.xcframework",
     "!ios/build",
     "!android/build",
     "!android/gradle",
@@ -38,7 +40,8 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
-    "release": "release-it --only-version"
+    "release": "release-it --only-version",
+    "postinstall": "node scripts/download-framework.js"
   },
   "keywords": [
     "react-native",
