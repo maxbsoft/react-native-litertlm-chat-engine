@@ -29,13 +29,22 @@ console.log('📦 Downloading ChatEngineWrapper.xcframework...');
 
 async function downloadFramework() {
   try {
-    // Try to download from GitHub LFS first
-    console.log('🔍 Attempting to download framework from GitHub LFS...');
+    // Try to download from GitHub Releases first
+    console.log('🔍 Attempting to download framework from GitHub Releases...');
 
-    const lfsUrl = `https://github.com/${GITHUB_REPO}/raw/main/${FRAMEWORK_NAME}`;
-    await downloadFromUrl(lfsUrl, frameworkPath);
+    const releaseUrl = await getLatestReleaseDownloadUrl();
+    console.log('📦 Found release URL:', releaseUrl);
+    
+    const archivePath = frameworkPath + '.tar.gz';
+    await downloadFromUrl(releaseUrl, archivePath);
+    
+    console.log('📦 Extracting framework...');
+    await extractFramework(archivePath, path.dirname(frameworkPath));
+    
+    // Clean up archive
+    fs.unlinkSync(archivePath);
 
-    console.log('✅ Framework downloaded successfully!');
+    console.log('✅ Framework downloaded and extracted successfully!');
   } catch (error) {
     console.error('❌ Failed to download framework:', error.message);
     console.log('');
@@ -56,59 +65,106 @@ async function downloadFramework() {
   }
 }
 
+async function getLatestReleaseDownloadUrl() {
+  return new Promise((resolve, reject) => {
+    const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+    
+    https.get(apiUrl, {
+      headers: {
+        'User-Agent': 'npm-postinstall-script'
+      }
+    }, (response) => {
+      let data = '';
+      
+      response.on('data', chunk => {
+        data += chunk;
+      });
+      
+      response.on('end', () => {
+        try {
+          const release = JSON.parse(data);
+          const asset = release.assets.find(asset => 
+            asset.name === 'ChatEngineWrapper.xcframework.tar.gz'
+          );
+          
+          if (!asset) {
+            reject(new Error('Framework asset not found in latest release'));
+            return;
+          }
+          
+          resolve(asset.browser_download_url);
+        } catch (parseError) {
+          reject(new Error('Failed to parse GitHub API response: ' + parseError.message));
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+async function extractFramework(archivePath, outputDir) {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    
+    const tar = spawn('tar', ['-xzf', archivePath, '-C', outputDir]);
+    
+    tar.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`tar extraction failed with code ${code}`));
+      }
+    });
+    
+    tar.on('error', reject);
+  });
+}
+
 function downloadFromUrl(url, outputPath) {
   return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(outputPath);
+    
     const request = https.get(url, (response) => {
       if (response.statusCode === 302 || response.statusCode === 301) {
         // Follow redirect
+        file.close();
+        fs.unlinkSync(outputPath);
         return downloadFromUrl(response.headers.location, outputPath)
           .then(resolve)
           .catch(reject);
       }
 
       if (response.statusCode !== 200) {
+        file.close();
+        fs.unlinkSync(outputPath);
         reject(
           new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`)
         );
         return;
       }
 
-      // Check if this is a Git LFS pointer file
-      let data = '';
-      response.on('data', (chunk) => {
-        data += chunk.toString();
+      response.pipe(file);
+
+      file.on('finish', () => {
+        file.close();
+        resolve();
       });
 
-      response.on('end', () => {
-        if (data.startsWith('version https://git-lfs.github.com/spec/v1')) {
-          reject(new Error('Received Git LFS pointer instead of actual file'));
-          return;
-        }
-
-        // If we got here, we have actual binary data
-        const file = fs.createWriteStream(outputPath);
-
-        const newRequest = https.get(url, (newResponse) => {
-          newResponse.pipe(file);
-
-          file.on('finish', () => {
-            file.close();
-            resolve();
-          });
-
-          file.on('error', (err) => {
-            fs.unlink(outputPath, () => {}); // Delete partial file
-            reject(err);
-          });
-        });
-
-        newRequest.on('error', reject);
+      file.on('error', (err) => {
+        fs.unlink(outputPath, () => {}); // Delete partial file
+        reject(err);
       });
     });
 
-    request.on('error', reject);
-    request.setTimeout(30000, () => {
+    request.on('error', (err) => {
+      file.close();
+      fs.unlink(outputPath, () => {});
+      reject(err);
+    });
+    
+    request.setTimeout(60000, () => {
       request.destroy();
+      file.close();
+      fs.unlink(outputPath, () => {});
       reject(new Error('Download timeout'));
     });
   });
