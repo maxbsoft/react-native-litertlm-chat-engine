@@ -7,7 +7,7 @@ const { execSync } = require('child_process');
 
 const FRAMEWORK_NAME = 'ChatEngineWrapper.xcframework';
 const GITHUB_REPO = 'maxbsoft/react-native-litertlm-chat-engine';
-const PACKAGE_VERSION = require('../package.json').version;
+const PACKAGE_VERSION = require(path.join(__dirname, '..', 'package.json')).version;
 
 // Skip download in development/source environments
 const isDevEnvironment = fs.existsSync(path.join(__dirname, '..', '.git'));
